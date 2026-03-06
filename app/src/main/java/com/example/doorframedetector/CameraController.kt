@@ -20,7 +20,7 @@ class CameraController(private val context: Context) {
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var cameraProvider: ProcessCameraProvider? = null
     private var camera: Camera? = null
-    private var imageAnalysis: ImageAnalysis? = null
+    // private var imageAnalysis: ImageAnalysis? = null
     private var preview: Preview? = null
     
     // 移除 initializeCamera，直接在 startCamera 中获取
@@ -48,16 +48,17 @@ class CameraController(private val context: Context) {
                     }
                 
                 // Image Analysis Use Case for real-time processing
-                // Using default YUV_420_888 format which is optimal for ML Kit
+                // Disabled for safe mode
+                /*
                 imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    // .setTargetResolution(Size(1280, 720)) // Optional: set resolution
                     .build()
                     .also { analysis ->
                         analysis.setAnalyzer(analysisExecutor) { image ->
                             frameProcessor(image)
                         }
                     }
+                */
                 
                 // Camera Selector - use back camera
                 val cameraSelector = CameraSelector.Builder()
@@ -67,13 +68,14 @@ class CameraController(private val context: Context) {
                 try {
                     // Bind use cases to camera
                     if (cameraProvider != null) {
+                        // Only bind preview for now to ensure stability
                         camera = cameraProvider!!.bindToLifecycle(
                             lifecycleOwner,
                             cameraSelector,
-                            preview,
-                            imageAnalysis
+                            preview
+                            // imageAnalysis
                         )
-                        Log.d("CameraController", "Camera started successfully")
+                        Log.d("CameraController", "Camera started successfully (Preview Only)")
                     }
                 } catch (exc: Exception) {
                     Log.e("CameraController", "Use case binding failed", exc)
@@ -88,7 +90,7 @@ class CameraController(private val context: Context) {
         try {
             cameraProvider?.unbindAll()
             camera = null
-            imageAnalysis = null
+            // imageAnalysis = null
             preview = null
         } catch (e: Exception) {
             Log.e("CameraController", "Error stopping camera", e)

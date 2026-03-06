@@ -22,7 +22,7 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
     private lateinit var instructionText: TextView
     
     private lateinit var cameraController: CameraController
-    private lateinit var visionProcessor: VisionProcessor
+    // private lateinit var visionProcessor: VisionProcessor
     private val analysisExecutor = Executors.newSingleThreadExecutor()
     
     companion object {
@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
             // Initialize components
             cameraController = CameraController(this)
             
+            /*
             try {
                 visionProcessor = VisionProcessor(this, this)
             } catch (e: Exception) {
@@ -53,6 +54,8 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
                 statusText.text = "检测功能不可用"
                 // Don't return, allow camera to start without detection if possible
             }
+            */
+            statusText.text = "检测功能已禁用 (安全模式)"
             
             // Check camera permission
             if (!hasCameraPermission()) {
@@ -111,13 +114,16 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
                     previewView,
                     analysisExecutor
                 ) { imageProxy ->
+                    /*
                     if (::visionProcessor.isInitialized) {
                         visionProcessor.processImage(imageProxy)
                     } else {
                         imageProxy.close()
                     }
+                    */
+                    imageProxy.close() // Just close the image in safe mode
                 }
-                statusText.text = "相机已启动"
+                statusText.text = "相机已启动 (安全模式)"
                 statusText.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start camera", e)
@@ -132,9 +138,11 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
         if (::cameraController.isInitialized) {
             cameraController.release()
         }
+        /*
         if (::visionProcessor.isInitialized) {
             visionProcessor.stop()
         }
+        */
         analysisExecutor.shutdown()
     }
     
