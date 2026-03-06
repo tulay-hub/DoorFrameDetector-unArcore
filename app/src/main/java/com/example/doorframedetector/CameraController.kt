@@ -15,9 +15,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
 
 class CameraController(private val context: Context) {
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -26,15 +23,7 @@ class CameraController(private val context: Context) {
     private var imageAnalysis: ImageAnalysis? = null
     private var preview: Preview? = null
     
-    suspend fun initializeCamera(): Boolean {
-        return try {
-            cameraProvider = getCameraProvider()
-            true
-        } catch (e: Exception) {
-            Log.e("CameraController", "Failed to initialize camera", e)
-            false
-        }
-    }
+    // 移除 initializeCamera，直接在 startCamera 中获取
     
     fun startCamera(
         lifecycleOwner: LifecycleOwner,
@@ -42,64 +31,68 @@ class CameraController(private val context: Context) {
         analysisExecutor: ExecutorService,
         frameProcessor: (ImageProxy) -> Unit
     ) {
-        val cameraProvider = cameraProvider ?: return
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         
-        // Unbind existing use cases
-        cameraProvider.unbindAll()
-        
-        // Preview Use Case
-        preview = Preview.Builder()
-            .build()
-            .also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
-            }
-        
-        // Image Analysis Use Case for real-time processing
-        // Using default YUV_420_888 format which is optimal for ML Kit
-        imageAnalysis = ImageAnalysis.Builder()
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            // .setTargetResolution(Size(1280, 720)) // Optional: set resolution
-            .build()
-            .also { analysis ->
-                analysis.setAnalyzer(analysisExecutor) { image ->
-                    frameProcessor(image)
+        cameraProviderFuture.addListener({
+            try {
+                cameraProvider = cameraProviderFuture.get()
+                
+                // Unbind existing use cases
+                cameraProvider?.unbindAll()
+                
+                // Preview Use Case
+                preview = Preview.Builder()
+                    .build()
+                    .also {
+                        it.setSurfaceProvider(previewView.surfaceProvider)
+                    }
+                
+                // Image Analysis Use Case for real-time processing
+                // Using default YUV_420_888 format which is optimal for ML Kit
+                imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    // .setTargetResolution(Size(1280, 720)) // Optional: set resolution
+                    .build()
+                    .also { analysis ->
+                        analysis.setAnalyzer(analysisExecutor) { image ->
+                            frameProcessor(image)
+                        }
+                    }
+                
+                // Camera Selector - use back camera
+                val cameraSelector = CameraSelector.Builder()
+                    .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                    .build()
+                
+                try {
+                    // Bind use cases to camera
+                    if (cameraProvider != null) {
+                        camera = cameraProvider!!.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview,
+                            imageAnalysis
+                        )
+                        Log.d("CameraController", "Camera started successfully")
+                    }
+                } catch (exc: Exception) {
+                    Log.e("CameraController", "Use case binding failed", exc)
                 }
+            } catch (e: Exception) {
+                Log.e("CameraController", "Failed to get camera provider", e)
             }
-        
-        // Camera Selector - use back camera
-        val cameraSelector = CameraSelector.Builder()
-            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-            .build()
-        
-        try {
-            // Bind use cases to camera
-            camera = cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                cameraSelector,
-                preview,
-                imageAnalysis
-            )
-        } catch (exc: Exception) {
-            Log.e("CameraController", "Use case binding failed", exc)
-        }
+        }, ContextCompat.getMainExecutor(context))
     }
     
     fun stopCamera() {
-        cameraProvider?.unbindAll()
-        camera = null
-        imageAnalysis = null
-        preview = null
-    }
-    
-    private suspend fun getCameraProvider(): ProcessCameraProvider = suspendCoroutine { continuation ->
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
-            try {
-                continuation.resume(cameraProviderFuture.get())
-            } catch (e: Exception) {
-                continuation.resumeWithException(e)
-            }
-        }, ContextCompat.getMainExecutor(context))
+        try {
+            cameraProvider?.unbindAll()
+            camera = null
+            imageAnalysis = null
+            preview = null
+        } catch (e: Exception) {
+            Log.e("CameraController", "Error stopping camera", e)
+        }
     }
     
     fun release() {

@@ -44,7 +44,15 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
             
             // Initialize components
             cameraController = CameraController(this)
-            visionProcessor = VisionProcessor(this, this)
+            
+            try {
+                visionProcessor = VisionProcessor(this, this)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize VisionProcessor", e)
+                Toast.makeText(this, "ML Kit 初始化失败: ${e.message}", Toast.LENGTH_LONG).show()
+                statusText.text = "检测功能不可用"
+                // Don't return, allow camera to start without detection if possible
+            }
             
             // Check camera permission
             if (!hasCameraPermission()) {
@@ -97,22 +105,36 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
         statusText.text = "正在启动相机..."
         
         previewView.post {
-            cameraController.startCamera(
-                this,
-                previewView,
-                analysisExecutor
-            ) { imageProxy ->
-                visionProcessor.processImage(imageProxy)
+            try {
+                cameraController.startCamera(
+                    this,
+                    previewView,
+                    analysisExecutor
+                ) { imageProxy ->
+                    if (::visionProcessor.isInitialized) {
+                        visionProcessor.processImage(imageProxy)
+                    } else {
+                        imageProxy.close()
+                    }
+                }
+                statusText.text = "相机已启动"
+                statusText.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start camera", e)
+                statusText.text = "相机启动失败"
+                Toast.makeText(this, "相机启动失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
-            statusText.text = "相机已启动"
-            statusText.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
         }
     }
     
     override fun onDestroy() {
         super.onDestroy()
-        cameraController.release()
-        visionProcessor.stop()
+        if (::cameraController.isInitialized) {
+            cameraController.release()
+        }
+        if (::visionProcessor.isInitialized) {
+            visionProcessor.stop()
+        }
         analysisExecutor.shutdown()
     }
     
@@ -143,6 +165,8 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
     }
     
     private fun mapRectToScreen(box: RectF, imageWidth: Int, imageHeight: Int, rotation: Int): RectF {
+        if (previewView.width == 0 || previewView.height == 0) return RectF()
+        
         val matrix = Matrix()
         val viewWidth = previewView.width.toFloat()
         val viewHeight = previewView.height.toFloat()
@@ -171,46 +195,10 @@ class MainActivity : AppCompatActivity(), VisionProcessor.DetectionListener {
         // 2. Translate
         matrix.postTranslate(dx, dy)
         
-        // 3. Handle rotation if needed (ML Kit coordinates are unrotated relative to the buffer)
-        // If rotation is 90, ML Kit returns coordinates in the (imageWidth x imageHeight) buffer.
-        // But visually, it's rotated.
-        // The mapping logic above assumes "srcWidth/srcHeight" corresponds to the visual image size.
-        // We need to map the "unrotated" box to the "visual" box first.
-        
         val mappedBox = RectF(box)
         
         if (isRotated) {
             // Transform the box from buffer coordinates to visual upright coordinates
-            // 90 degrees: (x, y) -> (height - y, x) ??
-            // ML Kit: "The origin is at the top-left corner of the image."
-            // If rotation is 90 (CCW or CW? Android rotation is usually CW from sensor to display),
-            // let's assume standard Android sensor orientation.
-            
-            // Actually, simpler way:
-            // Just scale the raw box and let the matrix handle it? No.
-            
-            // Let's look at how we derived srcWidth/srcHeight.
-            // If rotated, srcWidth = imageHeight.
-            
-            // Coordinate mapping for 90 deg rotation:
-            // newX = y
-            // newY = imageWidth - x
-            // (assuming 90 deg clockwise)
-            
-            // But wait, ML Kit usually returns normalized coordinates? No, pixel coordinates.
-            
-            // Let's try a heuristic:
-            // If the box is (l, t, r, b) in the buffer.
-            // And buffer is WxH.
-            // And rotation is 90.
-            // The displayed image is HxW.
-            // The point (x, y) in buffer maps to ??
-            
-            // To avoid complex math that might be wrong, let's use the matrix for rotation too if possible.
-            // But `postScale` above assumed we already had the upright dimensions.
-            
-            // Let's reset and do it step by step.
-            
             // Map buffer coordinates to 0..1
             mappedBox.left /= imageWidth
             mappedBox.right /= imageWidth
