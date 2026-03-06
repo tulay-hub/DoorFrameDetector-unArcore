@@ -20,11 +20,21 @@ android {
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Add abi filters to reduce APK size and avoid compatibility issues
+            ndk {
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
         }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+    }
+    packagingOptions {
+        pickFirst 'lib/x86/libc++_shared.so'
+        pickFirst 'lib/x86_64/libc++_shared.so'
+        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+        pickFirst 'lib/arm64-v8a/libc++_shared.so'
     }
 }
 
@@ -47,7 +57,7 @@ dependencies {
     // ML Kit for object detection
     implementation 'com.google.mlkit:object-detection:17.0.0'
     implementation 'com.google.mlkit:object-detection-custom:17.0.0'
-    implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.0'
+    // implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.0' // Removed unused dependency
     
     // TensorFlow Lite for custom models (optional)
     implementation 'org.tensorflow:tensorflow-lite:2.16.1'

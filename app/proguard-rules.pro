@@ -66,11 +66,12 @@
     public static <fields>;
 }
 
-# Remove debug logging in release builds
+# Remove debug logging in release builds (Keep Error logs)
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);
     public static *** i(...);
     public static *** w(...);
-    public static *** e(...);
+    # Keep error logs for debugging crashes
+    # public static *** e(...);
 }
